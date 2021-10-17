@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="https://unpkg.com/3d-force-graph"></script>
+    <style>
+      #controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 300px;
+        height: 100px;
+        background-color: #fff;
+        opacity: 0.8;
+        border: 1px solid #c3c3c3;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container"></div>
+    <div id="controls">
+      <label for="n_depth">Neighbours depth</label>
+      <input id="n_depth" value="1" type="number" />
+    </div>
+  </body>
+  <script>
+    var nDepth = 1;
+    let myGraph = window.ForceGraph3D();
+    let neighbours = {};
+    let activeNode = undefined;
+    let visible = new Set();
+    myGraph(document.getElementById("container"))
+      .jsonUrl("http://localhost:8080/graph.json")
+      .nodeId("unique_id")
+      .linkSource("from")
+      .linkTarget("to")
+      .linkLabel("kind")
+      .linkAutoColorBy("kind")
+      .nodeAutoColorBy("type")
+      .nodeVal((n) => {
+        if (n.type == "Program") return 1000;
+        if (n.type == "BlockStatement") return 300;
+        if (n.type == "Identifier") return 20;
+        return 1;
+      })
+      .nodeOpacity(0.6)
+      .linkOpacity(0.6)
+      .onLinkClick((link) => {
+        activeLinksKind = link.kind;
+        myGraph.refresh();
+      })
+      .onBackgroundClick(() => {
+        activeLinksKind = undefined;
+        activeNode = undefined;
+        visible.clear();
+        myGraph.refresh();
+      })
+      .onNodeClick((node) => {
+        //activeNode = node.unique_id;
+        //fillVisible(node.unique_id);
+        //myGraph.refresh();
+        console.log(`N`, getNeighbours(node.unique_id));
+      })
+      .linkVisibility(filterLinks)
+      .nodeVisibility(filterNodes)
+      .nodeLabel("type");
+
+    setTimeout(() => {
+      myGraph.graphData().links.forEach((link) => {
+        let { from, to, kind } = link;
+        if (!neighbours[from]) neighbours[from] = {};
+        if (!neighbours[from][kind]) neighbours[from][kind] = new Set();
+        neighbours[from][kind].add(to);
+        if (!neighbours[to]) neighbours[to] = {};
+        if (!neighbours[to][kind]) neighbours[to][kind] = new Set();
+        neighbours[to][kind].add(from);
+        console.log(`Ready!`);
+      });
+      //console.log(neighbours);
+    }, 5000);
+
+    var activeLinksKind = undefined;
+    function filterLinks(link) {
+      if (visible.size > 0 && !(visible.has(link.from) && visible.has(link.to)))
+        return false;
+      if (activeLinksKind && activeLinksKind != link.kind) return false;
+      return true;
+    }
+    function filterNodes(node) {
+      let { unique_id } = node;
+      if (activeNode && !visible.has(unique_id)) return false;
+      return neighbours[unique_id] && activeLinksKind
+        ? !!neighbours[unique_id][activeLinksKind]
+        : true;
+    }
+    function fillVisible(uid) {
+      visible = new Set([uid]);
+      for (let i = nDepth; i > 0; i--) {
+        for (let key of visible.keys()) {
+          let neighbours = getNeighbours(key);
+          neighbours.forEach((id) => visible.add(id));
+        }
+      }
+      console.log(`Visible`, visible);
+    }
+    function getNeighbours(uid) {
+      let n = [];
+      console.log(`neighbours`, { uid, n: neighbours[uid] });
+      if (!neighbours[uid]) return n;
+      for (let kind in neighbours[uid]) {
+        n = n.concat(Array.from(neighbours[uid][kind]));
+      }
+      return n;
+    }
+    document
+      .getElementById("n_depth")
+      .addEventListener("change", ({ target: { value } }) => {
+        nDepth = target.value;
+        myGraph.refresh();
+      });
+  </script>
+</html>
